@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script para instalar e executar WD-LLM-Caption-CLI
-# Uso: ./wd_caption_installer.sh <caminho_da_pasta_com_videos>
+# Uso: ./wd_caption_installer.sh <caminho_da_pasta_com_videos> [-K token]
 
 set -e  # Para no primeiro erro
 
@@ -29,28 +29,87 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Verifica se foi passado o caminho da pasta
-if [ -z "$1" ]; then
-    log_error "Uso: $0 <caminho_da_pasta_com_videos>"
-    exit 1
-fi
+# Função para mostrar ajuda
+show_help() {
+    echo "Uso: $0 <caminho_da_pasta_com_videos> [-K token]"
+    echo ""
+    echo "Argumentos:"
+    echo "  caminho_da_pasta_com_videos    Pasta contendo os vídeos para processar"
+    echo ""
+    echo "Opções:"
+    echo "  -K, --token TOKEN             Adiciona TOKEN no início de todos os arquivos .txt"
+    echo "                               Formato: 'TOKEN, [conteúdo_original]'"
+    echo "  -h, --help                   Mostra esta ajuda"
+    echo ""
+    echo "Exemplos:"
+    echo "  $0 /pasta/videos"
+    echo "  $0 /pasta/videos -K meu_token"
+    echo "  $0 /pasta/videos --token meu_token"
+}
 
-VIDEO_PATH="$1"
+# Variáveis globais
+VIDEO_PATH=""
+TOKEN=""
 
-# Verifica se a pasta existe
-if [ ! -d "$VIDEO_PATH" ]; then
-    log_error "Pasta não encontrada: $VIDEO_PATH"
-    exit 1
-fi
+# Parse dos argumentos
+parse_arguments() {
+    if [ $# -eq 0 ]; then
+        log_error "Nenhum argumento fornecido."
+        show_help
+        exit 1
+    fi
+    
+    while [ $# -gt 0 ]; do
+        case $1 in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -K|--token)
+                if [ -z "$2" ] || [[ $2 == -* ]]; then
+                    log_error "Token não pode estar vazio após -K/--token"
+                    show_help
+                    exit 1
+                fi
+                TOKEN="$2"
+                shift 2
+                ;;
+            -*)
+                log_error "Opção desconhecida: $1"
+                show_help
+                exit 1
+                ;;
+            *)
+                if [ -z "$VIDEO_PATH" ]; then
+                    VIDEO_PATH="$1"
+                else
+                    log_error "Múltiplos caminhos especificados. Use apenas um."
+                    show_help
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    # Verifica se o caminho foi fornecido
+    if [ -z "$VIDEO_PATH" ]; then
+        log_error "Caminho da pasta com vídeos é obrigatório."
+        show_help
+        exit 1
+    fi
+    
+    # Verifica se a pasta existe
+    if [ ! -d "$VIDEO_PATH" ]; then
+        log_error "Pasta não encontrada: $VIDEO_PATH"
+        exit 1
+    fi
+}
 
 # Diretório base para instalação (mesmo diretório do script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="$SCRIPT_DIR/wd-llm-caption-cli"
 FRAMES_DIR="$SCRIPT_DIR/extracted_frames"
-
-log_info "Iniciando processo de instalação e execução..."
-log_info "Pasta de vídeos: $VIDEO_PATH"
-log_info "Diretório de instalação: $INSTALL_DIR"
 
 # Função para instalar OpenCV se não estiver instalado
 install_opencv() {
@@ -290,7 +349,6 @@ move_captions() {
     log_success "Captions movidos para: $VIDEO_PATH"
 }
 
-# --- NOVA FUNÇÃO ADICIONADA ---
 # Função para limpar frases indesejadas das captions
 cleanup_captions() {
     log_info "Limpando frases indesejadas dos arquivos de caption..."
@@ -322,12 +380,63 @@ cleanup_captions() {
     
     log_success "$cleaned_count arquivos de caption foram limpos."
 }
-# --- FIM DA NOVA FUNÇÃO ---
 
+# --- NOVA FUNÇÃO ADICIONADA ---
+# Função para adicionar token no início dos arquivos de caption
+add_token_to_captions() {
+    # Se não há token especificado, pula esta função
+    if [ -z "$TOKEN" ]; then
+        return 0
+    fi
+    
+    log_info "Adicionando token '$TOKEN' no início dos arquivos de caption..."
+    
+    # Verifica se existem arquivos .txt para processar
+    if ! compgen -G "$VIDEO_PATH/*.txt" > /dev/null; then
+        log_warning "Nenhum arquivo .txt encontrado para adicionar token."
+        return
+    fi
+    
+    local processed_count=0
+    # Loop através de todos os arquivos .txt na pasta de destino
+    for caption_file in "$VIDEO_PATH"/*.txt; do
+        if [ -f "$caption_file" ]; then
+            # Lê o conteúdo atual do arquivo
+            original_content=$(cat "$caption_file")
+            
+            # Remove espaços em branco no início e no fim
+            original_content=$(echo "$original_content" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            
+            # Se o arquivo não está vazio e não começa já com o token
+            if [ -n "$original_content" ] && [[ "$original_content" != "$TOKEN,"* ]]; then
+                # Escreve o novo conteúdo com o token no início
+                echo "$TOKEN, $original_content" > "$caption_file"
+                processed_count=$((processed_count + 1))
+                log_info "Token adicionado em: $(basename "$caption_file")"
+            elif [[ "$original_content" == "$TOKEN,"* ]]; then
+                log_warning "Token já presente em: $(basename "$caption_file")"
+            elif [ -z "$original_content" ]; then
+                log_warning "Arquivo vazio ignorado: $(basename "$caption_file")"
+            fi
+        fi
+    done
+    
+    log_success "Token '$TOKEN' adicionado em $processed_count arquivos de caption."
+}
+# --- FIM DA NOVA FUNÇÃO ---
 
 # Função principal
 main() {
     log_info "=== WD-LLM-Caption-CLI Auto Installer ==="
+    
+    # Parse dos argumentos
+    parse_arguments "$@"
+    
+    log_info "Pasta de vídeos: $VIDEO_PATH"
+    log_info "Diretório de instalação: $INSTALL_DIR"
+    if [ -n "$TOKEN" ]; then
+        log_info "Token a ser adicionado: '$TOKEN'"
+    fi
     
     # Instala OpenCV
     install_opencv
@@ -344,16 +453,25 @@ main() {
     # Move captions para pasta original
     move_captions
     
-    # --- CHAMADA PARA A NOVA FUNÇÃO ---
     # Limpa as captions de frases indesejadas
     cleanup_captions
+    
+    # --- CHAMADA PARA A NOVA FUNÇÃO ---
+    # Adiciona token no início dos arquivos (se especificado)
+    add_token_to_captions
     # --- FIM DA CHAMADA ---
     
     log_success "=== Processo concluído com sucesso! ==="
-    log_info "Os arquivos de caption (.txt) foram criados e limpos na pasta: $VIDEO_PATH"
+    log_info "Os arquivos de caption (.txt) foram criados e processados na pasta: $VIDEO_PATH"
+    if [ -n "$TOKEN" ]; then
+        log_info "Token '$TOKEN' foi adicionado ao início de todos os arquivos de caption."
+    fi
     log_info "Os frames extraídos estão em: $FRAMES_DIR"
     log_info "Para executar novamente, use: $0 $VIDEO_PATH"
+    if [ -n "$TOKEN" ]; then
+        log_info "Com token: $0 $VIDEO_PATH -K $TOKEN"
+    fi
 }
 
 # Executa função principal
-main
+main "$@"
