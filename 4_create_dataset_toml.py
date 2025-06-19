@@ -30,8 +30,8 @@ bucket_no_upscale = false
 [[datasets]]
 video_directory = "{video_dir}"
 cache_directory = "{cache_dir}"
-target_frames = {target_frames}
-frame_extraction = "head"
+max_frames = 81
+frame_extraction = "full"
 source_fps = {source_fps}
 """
 
@@ -62,7 +62,7 @@ def main():
     parser.add_argument(
         "-R", "--resolution",
         type=str,
-        default="256x256",
+        default="512x512",
         help="Resolução dos vídeos no formato LARGURAxALTURA.\n(padrão: 256x256)"
     )
     parser.add_argument(

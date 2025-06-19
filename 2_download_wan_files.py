@@ -47,6 +47,11 @@ MODELS_TO_DOWNLOAD = [
         "local_filename": "wan2.1_t2v_14B_fp16.safetensors"
     },
     {
+    "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+    "repo_filename": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors",
+    "local_filename": "wan2.1_i2v_480p_14B_fp16.safetensors"
+    },
+    {
         "repo_id": "Wan-AI/Wan2.1-T2V-14B",
         "repo_filename": "Wan2.1_VAE.pth",
         "local_filename": "Wan2.1_VAE.pth"
