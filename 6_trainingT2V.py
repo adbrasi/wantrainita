@@ -16,12 +16,12 @@ MODELS_DIR = "models"
 
 # Hiperparâmetros baseados no seu comando preferido
 TASK = "t2v-14B"
-LEARNING_RATE = "6e-05"
-NETWORK_DIM = "64"
+LEARNING_RATE = "6e-5"
+NETWORK_DIM = "16"
 MAX_TRAIN_EPOCHS = "50"
-SAVE_EVERY_N_EPOCHS = "2"
-SAVE_EVERY_N_STEPS = "5" # Adicionado baseado no seu comando original
-SEED = "48"
+SAVE_EVERY_N_EPOCHS = "4"
+#SAVE_EVERY_N_STEPS = "5" # Adicionado baseado no seu comando original
+SEED = "748"
 
 def run_command_realtime(command, error_msg):
     """Executa um comando e exibe sua saída em tempo real, linha por linha."""
@@ -79,7 +79,7 @@ def main(args):
     train_script = str(repo_path / "src/musubi_tuner/wan_train_network.py")
     
     # Argumentos do otimizador separados corretamente
-    optimizer_args_list = ["betas=0.9,0.99", "weight_decay=0.01", "eps=1e-8"]
+    optimizer_args_list = ["betas=0.9,0.999,0.9999", "weight_decay=0.01", "eps=1e-30,1e-16"]
 
     command = [
         "accelerate", "launch", "--num_cpu_threads_per_process", "1", "--mixed_precision", "fp16",
@@ -88,23 +88,28 @@ def main(args):
         "--dit", str(dit_model_path),
         "--dataset_config", str(dataset_toml_path),
         "--sdpa",
-        "--optimizer_type", "adamw8bit",
+        "--split_attn",
+        "--blocks_to_swap","16",
+        "--optimizer_type", "came_pytorch.CAME.CAME",
         "--learning_rate", LEARNING_RATE,
         "--max_data_loader_n_workers", "2",
         "--mixed_precision", "fp16", 
         "--persistent_data_loader_workers",
         "--network_module", "networks.lora_wan",
         "--network_dim", NETWORK_DIM,
+        "--network_alpha",NETWORK_DIM,
         "--timestep_sampling", "shift",
-        "--discrete_flow_shift", "3.0",
+        "--discrete_flow_shift", "3.5",
         "--max_train_epochs", MAX_TRAIN_EPOCHS,
         "--save_every_n_epochs", SAVE_EVERY_N_EPOCHS,
         "--seed", SEED,
         "--output_dir", str(output_dir),
         "--output_name", args.name,
         "--network_args", "loraplus_lr_ratio=4",
-        "--lr_scheduler", "cosine_with_restarts",
+        "--lr_scheduler", "constant_with_warmup",
+        "--lr_warmup_steps","100",
         "--fp8_base",
+        "--fp8_scaled",
         "--gradient_checkpointing",
         "--optimizer_args", *optimizer_args_list # CORREÇÃO: Passando como argumentos separados
     ]
